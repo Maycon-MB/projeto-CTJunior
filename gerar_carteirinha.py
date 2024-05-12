@@ -6,17 +6,17 @@ import gspread, datetime, tempfile
 
 # Defina as permissões necessárias
 SCOPES_DRIVE = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/drive.file"]
-SERVICE_ACCOUNT_FILE = "APIs/credenciais_gdrive.json"
+SERVICE_ACCOUNT_FILE = "googledrive_credenciais.json"
 SCOPES_SPREADSHEETS = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Carregue suas credenciais do arquivo JSON para Google Drive
 credenciais_drive = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES_DRIVE)
 
 # Build the Google Drive service
-drive_service = build('drive', 'v3', credentials=credenciais_drive)
+drive_service = build('drive', 'v3', credentials=credenciais_drive, static_discovery=False)
 
 # Carregue suas credenciais do arquivo JSON para Google Sheets
-credenciais_spreadsheets = Credentials.from_service_account_file("APIs/credenciais_spreadsheet.json", scopes=SCOPES_SPREADSHEETS)
+credenciais_spreadsheets = Credentials.from_service_account_file("googledrive_credenciais.jsonn", scopes=SCOPES_SPREADSHEETS)
 
 # Autorize o cliente Google Sheets usando suas credenciais
 client = gspread.authorize(credenciais_spreadsheets)
@@ -192,7 +192,7 @@ import gspread, datetime, tempfile
 
 # Defina as permissões necessárias
 SCOPES_DRIVE = ["https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/drive.file"]
-SERVICE_ACCOUNT_FILE = "APIs/credenciais_gdrive.json"
+SERVICE_ACCOUNT_FILE = "googledrive_credenciais.json"
 SCOPES_SPREADSHEETS = ["https://www.googleapis.com/auth/spreadsheets"]
 
 # Carregue suas credenciais do arquivo JSON para Google Drive
@@ -202,7 +202,7 @@ credenciais_drive = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, 
 drive_service = build('drive', 'v3', credentials=credenciais_drive)
 
 # Carregue suas credenciais do arquivo JSON para Google Sheets
-credenciais_spreadsheets = Credentials.from_service_account_file("APIs/credenciais_spreadsheet.json", scopes=SCOPES_SPREADSHEETS)
+credenciais_spreadsheets = Credentials.from_service_account_file("credenciais_spreadsheet.json", scopes=SCOPES_SPREADSHEETS)
 
 # Autorize o cliente Google Sheets usando suas credenciais
 client = gspread.authorize(credenciais_spreadsheets)
