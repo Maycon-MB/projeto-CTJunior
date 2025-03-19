@@ -3,7 +3,7 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from dotenv import load_dotenv
-import gspread, datetime, tempfile, os
+import gspread, datetime, tempfile, os, sys, logging
 
 # Configurações globais
 SCOPES = [
@@ -15,8 +15,27 @@ SCOPES = [
 # Carrega as variáveis do arquivo .env
 load_dotenv()
 
-# Substitua as configurações globais por:
-SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE")
+def get_file_path(file_name):
+    if getattr(sys, 'frozen', False):
+        # Se estiver rodando como executável, usa a pasta temporária onde o PyInstaller extrai os arquivos
+        base_path = sys._MEIPASS
+    else:
+        # Se estiver rodando como script Python normal, usa o diretório atual
+        base_path = os.getcwd()
+    
+    return os.path.join(base_path, file_name)
+
+def get_json_path():
+    return get_file_path("APIs/ct-junior-oficial.json")
+
+def get_image_path(image_name):
+    return get_file_path(f"imgs/{image_name}")
+
+# Caminhos para o arquivo JSON e imagens
+SERVICE_ACCOUNT_FILE = get_json_path()
+FRENTE_TEMPLATE_PATH = get_image_path("frente_carteirinha600.jpg")
+VERSO_TEMPLATE_PATH = get_image_path("verso_carteirinha600.jpg")
+
 CARTEIRINHAS_SHEET_ID = os.getenv("CARTEIRINHAS_SHEET_ID")
 FICHAS_SHEET_ID = os.getenv("FICHAS_SHEET_ID")
 CONTRACT_TEMPLATE_ID = os.getenv("CONTRACT_TEMPLATE_ID")
@@ -29,17 +48,13 @@ drive_service = build('drive', 'v3', credentials=credenciais)
 docs_service = build('docs', 'v1', credentials=credenciais)
 client = gspread.authorize(credenciais)
 
-# Constantes para caminhos de templates
-FRENTE_TEMPLATE_PATH = "dist/frente_carteirinha600.jpg"
-VERSO_TEMPLATE_PATH = "dist/verso_carteirinha600.jpg"
-
 # Funções para o Google Drive
 def get_or_create_folder(name, parent_id):
     query = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and '{parent_id}' in parents"
     folders = drive_service.files().list(q=query, fields='files(id)').execute().get('files', [])
     if folders:
         return folders[0]['id']
-    print(f"📂 Criando pasta '{name}'...")
+    logging.info(f"📂 Criando pasta '{name}'...")
     folder_metadata = {'name': name, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [parent_id]}
     folder_id = drive_service.files().create(body=folder_metadata, fields='id').execute().get('id')
     return folder_id
@@ -50,10 +65,10 @@ def upload_file(file_path, file_name, folder_id):
     media = MediaFileUpload(file_path, mimetype='image/jpeg')
     if files:
         drive_service.files().update(fileId=files[0]['id'], media_body=media).execute()
-        print(f"🔄 Arquivo '{file_name}' atualizado no Drive.")
+        logging.info(f"🔄 Arquivo '{file_name}' atualizado no Drive.")
     else:
         drive_service.files().create(body={'name': file_name, 'parents': [folder_id]}, media_body=media, fields='id').execute()
-        print(f"✅ Arquivo '{file_name}' enviado para o Drive.")
+        logging.info(f"✅ Arquivo '{file_name}' enviado para o Drive.")
 
 # Funções para geração de carteirinhas
 def gerar_matricula(nome, data_nascimento):
@@ -117,7 +132,7 @@ def preencher_contrato(aluno_data, contract_id, folder_id):
     document_id = get_or_create_document(document_name, contract_id, folder_id)
     requests = [{"replaceAllText": {"containsText": {"text": k, "matchCase": True}, "replaceText": v}} for k, v in placeholders.items()]
     docs_service.documents().batchUpdate(documentId=document_id, body={"requests": requests}).execute()
-    print(f"📄 Ficha de inscrição atualizada para {aluno_data[2]} com ID: {document_id}")
+    logging.info(f"📄 Ficha de inscrição atualizada para {aluno_data[2]} com ID: {document_id}")
 
 def atualizar_ano_letivo():
     carteirinhas_doc = client.open_by_key(CARTEIRINHAS_SHEET_ID)
@@ -127,11 +142,11 @@ def atualizar_ano_letivo():
     aba_atual = next((sheet for sheet in planilhas if str(ano_atual) in sheet.title), None)
 
     if aba_atual:
-        print(f"📌 A aba do ano {ano_atual} já existe.")
+        logging.info(f"📌 A aba do ano {ano_atual} já existe.")
         return
 
     aba_anterior = sorted(planilhas, key=lambda x: int(x.title), reverse=True)[0]
-    print(f"🔄 Criando nova aba para o ano {ano_atual} baseada em {aba_anterior.title}...")
+    logging.info(f"🔄 Criando nova aba para o ano {ano_atual} baseada em {aba_anterior.title}...")
 
     nova_aba = carteirinhas_doc.add_worksheet(title=str(ano_atual), rows="1000", cols="26")
     cabeçalhos = aba_anterior.row_values(1)
@@ -144,12 +159,23 @@ def atualizar_ano_letivo():
         for aluno in novos_alunos:
             aluno[13:25] = [""] * 12
         nova_aba.append_rows(novos_alunos)
-        print(f"✅ {len(novos_alunos)} alunos ativos copiados para a aba {ano_atual}.")
+        logging.info(f"✅ {len(novos_alunos)} alunos ativos copiados para a aba {ano_atual}.")
 
-    print("🎉 Ano letivo atualizado com sucesso!")
+    logging.info("🎉 Ano letivo atualizado com sucesso!")
 
 # Função principal
 def main():
+    # Configuração do logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        filename='gerenciar_alunos.log',
+        filemode='a'  # 'a' para append, 'w' para sobrescrever
+    )
+    
+    logging.info("Iniciando o script de gerenciamento de alunos.")
+
+
     carteirinhas_sheet = client.open_by_key(CARTEIRINHAS_SHEET_ID).sheet1
     fichas_sheet = client.open_by_key(FICHAS_SHEET_ID).sheet1
 
@@ -157,10 +183,10 @@ def main():
     
     nova_pasta_id = get_or_create_folder("Alunos", root_folder_id)
 
-    print("📜 Processando alunos da planilha de carteirinhas...")
+    logging.info("📜 Processando alunos da planilha de carteirinhas...")
     for row in carteirinhas_sheet.get_all_values()[1:]:
         nome_aluno = row[2]
-        print(f"\n🧑‍🎓 Processando aluno: {nome_aluno}")
+        logging.info(f"\n🧑‍🎓 Processando aluno: {nome_aluno}")
 
         pasta_aluno_id = get_or_create_folder(nome_aluno, nova_pasta_id)
 
@@ -189,7 +215,7 @@ def main():
         if aluno_data:
             preencher_contrato(aluno_data[0], CONTRACT_TEMPLATE_ID, pasta_aluno_id)
 
-    print("🎉 Processamento concluído!")
+    logging.info("🎉 Processamento concluído!")
 
 if __name__ == "__main__":
     main()
