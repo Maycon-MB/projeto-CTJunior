@@ -1,5 +1,6 @@
 # Ignorar arquivos sensíveis
 apis/ct-junior-oficial.json
+apis/ct-junior-gdrive.json
 .env
 __pycache__/
 dist/
