@@ -2,6 +2,7 @@ from PIL import Image, ImageDraw, ImageFont
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from dotenv import load_dotenv
 import gspread, datetime, tempfile, os
 
 # Configurações globais
@@ -11,14 +12,17 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/documents"
 ]
-SERVICE_ACCOUNT_FILE = "apis/ct-junior-oficial.json"
-credenciais = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+# Carrega as variáveis do arquivo .env
+load_dotenv()
 
-# IDs das planilhas e templates
-CARTEIRINHAS_SHEET_ID = "1Z4dTfKmKAPijo9Jw29QRry5IwuroD8oAQs1lhxwykmk"
-FICHAS_SHEET_ID = "1Yb76zOMkez5mvzdGUaOvzZlYS4fq4V0421wOAc0Io0Y"
-CONTRACT_TEMPLATE_ID = "1yB0hPJHih-LXGcqySHMMu3UVN654Ee_FtMqANn1HgXo"
-root_folder_id = "13uvKCDRsIdVzsidbIuuucyeapACO_2MI"
+# Substitua as configurações globais por:
+SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE")
+CARTEIRINHAS_SHEET_ID = os.getenv("CARTEIRINHAS_SHEET_ID")
+FICHAS_SHEET_ID = os.getenv("FICHAS_SHEET_ID")
+CONTRACT_TEMPLATE_ID = os.getenv("CONTRACT_TEMPLATE_ID")
+root_folder_id = os.getenv("root_folder_id")
+
+credenciais = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 
 # Inicialização dos serviços
 drive_service = build('drive', 'v3', credentials=credenciais)

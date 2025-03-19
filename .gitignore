@@ -1,0 +1,7 @@
+# Ignorar arquivos sensíveis
+apis/ct-junior-oficial.json
+.env
+__pycache__/
+dist/
+build/
+*.spec
