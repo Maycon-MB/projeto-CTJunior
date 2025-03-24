@@ -3,7 +3,31 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from dotenv import load_dotenv
-import gspread, datetime, tempfile, os, sys, logging
+import gspread, datetime, tempfile, os, sys, configparser
+
+# Se estiver rodando como .exe, usa o diretório do executável
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)  # Diretório do .exe
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Diretório do .py
+
+# Lê o arquivo de configuração
+config = configparser.ConfigParser()
+config_path = os.path.join(BASE_DIR, "config.ini")
+
+if not os.path.exists(config_path):
+    raise FileNotFoundError(f"Arquivo de configuração não encontrado: {config_path}")
+
+config.read(config_path)
+
+# Obtém o caminho do JSON do config.ini
+SERVICE_ACCOUNT_FILE = config["DEFAULT"].get("SERVICE_ACCOUNT_FILE", "").strip()
+
+# Verifica se o arquivo JSON existe
+if not SERVICE_ACCOUNT_FILE or not os.path.exists(SERVICE_ACCOUNT_FILE):
+    raise FileNotFoundError(f"Arquivo JSON não encontrado: {SERVICE_ACCOUNT_FILE}")
+
+print(f"✅ Usando credenciais de: {SERVICE_ACCOUNT_FILE}")
 
 # Configurações globais
 SCOPES = [
@@ -16,13 +40,7 @@ SCOPES = [
 load_dotenv()
 
 def get_file_path(file_name):
-    if getattr(sys, 'frozen', False):
-        # Se estiver rodando como executável, usa a pasta temporária onde o PyInstaller extrai os arquivos
-        base_path = sys._MEIPASS
-    else:
-        # Se estiver rodando como script Python normal, usa o diretório atual
-        base_path = os.getcwd()
-    
+    base_path = getattr(sys, 'frozen', False) and sys._MEIPASS or os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, file_name)
 
 def get_json_path():
@@ -36,10 +54,10 @@ SERVICE_ACCOUNT_FILE = get_json_path()
 FRENTE_TEMPLATE_PATH = get_image_path("frente_carteirinha600.jpg")
 VERSO_TEMPLATE_PATH = get_image_path("verso_carteirinha600.jpg")
 
-CARTEIRINHAS_SHEET_ID = os.getenv("CARTEIRINHAS_SHEET_ID")
-FICHAS_SHEET_ID = os.getenv("FICHAS_SHEET_ID")
-CONTRACT_TEMPLATE_ID = os.getenv("CONTRACT_TEMPLATE_ID")
-root_folder_id = os.getenv("root_folder_id")
+CARTEIRINHAS_SHEET_ID = "1Z4dTfKmKAPijo9Jw29QRry5IwuroD8oAQs1lhxwykmk"
+FICHAS_SHEET_ID = "1Yb76zOMkez5mvzdGUaOvzZlYS4fq4V0421wOAc0Io0Y"
+CONTRACT_TEMPLATE_ID = "1yB0hPJHih-LXGcqySHMMu3UVN654Ee_FtMqANn1HgXo"
+ROOT_FOLDER_ID = "13uvKCDRsIdVzsidbIuuucyeapACO_2MI"
 
 credenciais = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
 
@@ -54,7 +72,7 @@ def get_or_create_folder(name, parent_id):
     folders = drive_service.files().list(q=query, fields='files(id)').execute().get('files', [])
     if folders:
         return folders[0]['id']
-    logging.info(f"📂 Criando pasta '{name}'...")
+    print(f"📂 Criando pasta '{name}'...")
     folder_metadata = {'name': name, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [parent_id]}
     folder_id = drive_service.files().create(body=folder_metadata, fields='id').execute().get('id')
     return folder_id
@@ -65,10 +83,10 @@ def upload_file(file_path, file_name, folder_id):
     media = MediaFileUpload(file_path, mimetype='image/jpeg')
     if files:
         drive_service.files().update(fileId=files[0]['id'], media_body=media).execute()
-        logging.info(f"🔄 Arquivo '{file_name}' atualizado no Drive.")
+        print(f"🔄 Arquivo '{file_name}' atualizado no Drive.")
     else:
         drive_service.files().create(body={'name': file_name, 'parents': [folder_id]}, media_body=media, fields='id').execute()
-        logging.info(f"✅ Arquivo '{file_name}' enviado para o Drive.")
+        print(f"✅ Arquivo '{file_name}' enviado para o Drive.")
 
 # Funções para geração de carteirinhas
 def gerar_matricula(nome, data_nascimento):
@@ -132,7 +150,7 @@ def preencher_contrato(aluno_data, contract_id, folder_id):
     document_id = get_or_create_document(document_name, contract_id, folder_id)
     requests = [{"replaceAllText": {"containsText": {"text": k, "matchCase": True}, "replaceText": v}} for k, v in placeholders.items()]
     docs_service.documents().batchUpdate(documentId=document_id, body={"requests": requests}).execute()
-    logging.info(f"📄 Ficha de inscrição atualizada para {aluno_data[2]} com ID: {document_id}")
+    print(f"📄 Ficha de inscrição atualizada para {aluno_data[2]} com ID: {document_id}")
 
 def atualizar_ano_letivo():
     carteirinhas_doc = client.open_by_key(CARTEIRINHAS_SHEET_ID)
@@ -142,11 +160,11 @@ def atualizar_ano_letivo():
     aba_atual = next((sheet for sheet in planilhas if str(ano_atual) in sheet.title), None)
 
     if aba_atual:
-        logging.info(f"📌 A aba do ano {ano_atual} já existe.")
+        print(f"📌 A aba do ano {ano_atual} já existe.")
         return
 
     aba_anterior = sorted(planilhas, key=lambda x: int(x.title), reverse=True)[0]
-    logging.info(f"🔄 Criando nova aba para o ano {ano_atual} baseada em {aba_anterior.title}...")
+    print(f"🔄 Criando nova aba para o ano {ano_atual} baseada em {aba_anterior.title}...")
 
     nova_aba = carteirinhas_doc.add_worksheet(title=str(ano_atual), rows="1000", cols="26")
     cabeçalhos = aba_anterior.row_values(1)
@@ -159,42 +177,35 @@ def atualizar_ano_letivo():
         for aluno in novos_alunos:
             aluno[13:25] = [""] * 12
         nova_aba.append_rows(novos_alunos)
-        logging.info(f"✅ {len(novos_alunos)} alunos ativos copiados para a aba {ano_atual}.")
+        print(f"✅ {len(novos_alunos)} alunos ativos copiados para a aba {ano_atual}.")
 
-    logging.info("🎉 Ano letivo atualizado com sucesso!")
+    print("🎉 Ano letivo atualizado com sucesso!")
 
 # Função principal
 def main():
-    # Configuração do logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        filename='gerenciar_alunos.log',
-        filemode='a'  # 'a' para append, 'w' para sobrescrever
-    )
-    
-    logging.info("Iniciando o script de gerenciamento de alunos.")
-
+    print("Iniciando o script de gerenciamento de alunos.")
 
     carteirinhas_sheet = client.open_by_key(CARTEIRINHAS_SHEET_ID).sheet1
     fichas_sheet = client.open_by_key(FICHAS_SHEET_ID).sheet1
 
     atualizar_ano_letivo()
     
-    nova_pasta_id = get_or_create_folder("Alunos", root_folder_id)
+    nova_pasta_id = get_or_create_folder("Alunos", ROOT_FOLDER_ID)
 
-    logging.info("📜 Processando alunos da planilha de carteirinhas...")
-    for row in carteirinhas_sheet.get_all_values()[1:]:
+    print("📜 Processando alunos da planilha de carteirinhas...")
+    # Lendo todos os dados da planilha de fichas ANTES do loop
+    fichas_data = fichas_sheet.get_all_values()[1:]
+
+    for i, row in enumerate(carteirinhas_sheet.get_all_values()[1:]):
         nome_aluno = row[2]
-        logging.info(f"\n🧑‍🎓 Processando aluno: {nome_aluno}")
-
+        print(f"\n🧑🎓 Processando aluno: {nome_aluno}")
         pasta_aluno_id = get_or_create_folder(nome_aluno, nova_pasta_id)
-
         info_aluno = {
             "vencimento": row[0], "modalidade": row[1], "cpf": row[3], "contato": row[5] or row[4],
             "data_nascimento": row[6], "forma_pagamento": row[7], "numero_matricula": gerar_matricula(row[2], row[6]),
             "dia": row[8], "mes": row[9], "ano": row[10], "visto": row[11], "digito": row[12]
         }
+
         frente_path = preencher_carteirinha(FRENTE_TEMPLATE_PATH, [
             ((269, 120), info_aluno["vencimento"]), ((499, 120), info_aluno["modalidade"]),
             ((206, 215), nome_aluno), ((206, 265), info_aluno["cpf"]), ((206, 314), info_aluno["contato"]),
@@ -202,20 +213,21 @@ def main():
             ((218, 548), info_aluno["numero_matricula"]), ((126, 639), info_aluno["dia"]),
             ((201, 639), info_aluno["mes"]), ((276, 639), info_aluno["ano"]), ((250, 731), info_aluno["visto"])
         ], f"frente_{nome_aluno.replace(' ', '_')}.jpg")
-
         verso_path = preencher_carteirinha(VERSO_TEMPLATE_PATH, [
             ((150, 28), info_aluno["digito"])
-        ] + [((166 + (i % 2) * 205, 154 + (i // 2) * 88), row[13 + i]) for i in range(12)], 
+        ] + [((166 + (i % 2) * 205, 154 + (i // 2) * 88), row[13 + i]) for i in range(12)],
         f"verso_{nome_aluno.replace(' ', '_')}.jpg")
-
         caminho_unificado = unificar_carteirinha(frente_path, verso_path)
         upload_file(caminho_unificado, f"carteirinha_{nome_aluno.replace(' ', '_')}.jpg", pasta_aluno_id)
 
-        aluno_data = fichas_sheet.get_all_values()[1:]
-        if aluno_data:
-            preencher_contrato(aluno_data[0], CONTRACT_TEMPLATE_ID, pasta_aluno_id)
+        # Acessando os dados do aluno correspondente na planilha de fichas
+        if i < len(fichas_data):  # Garante que o índice está dentro dos limites
+            aluno_data = fichas_data[i]
+            preencher_contrato(aluno_data, CONTRACT_TEMPLATE_ID, pasta_aluno_id)
+        else:
+            print(f"⚠️ Sem dados correspondentes na planilha de fichas para o aluno {nome_aluno}.")
 
-    logging.info("🎉 Processamento concluído!")
+    print("🎉 Processamento concluído!")
 
 if __name__ == "__main__":
     main()
